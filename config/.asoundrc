@@ -1,0 +1,206 @@
+# Use this file for a user-configurable ALSA soundcard setup.
+# Place in the user's home folder (/home/ham/.asoundrc).
+
+# This file is built for a Tigertronics Signalink USB, a USB
+# soundcard designed to interface a computer with an amateur
+# radio transceiver for digital mode operation. This
+# configuration allows multiple programs to access the same
+# sound device simultaneously without blocking the device.
+# This configuration is built on a custom modprobe
+# configuration file (/etc/modprobe.d/alsa-base.conf) to
+# force consistent device labeling. While adjusting parameters,
+# it is not necessary to reboot or log out to see changes.
+# Simply save this file, restart the programs using the card
+# and select the device in the software (if naming changed).
+
+# Some notes about the Signalink USB:
+# Different programs require different sampling rates, ie
+# WSJT-X _requires_ 48 kHz sampling (thanks to K9YC for the tip!),
+# while fldigi allows custom sampling rates (given the device
+# supports them). The native sampling rate for the SLUSB is
+# 44.1 kHz, but it supports up to 48 kHz. For this config,
+# I used 48 kHz to satisfy WSJT-X, then adjusted fldigi to match.
+# Other software requires various numbers of channels, ie qsstv.
+# While the device has only 1 channel for each input and output,
+# ALSA may split or join streams with plugins.
+
+#####################################################################
+# Software settings:
+#####################################################################
+
+# Fldigi:
+# Mono or stereo io
+# In stereo mode, tx audio is on right channel, so will require
+# channels to be swapped in audio settings.
+
+# WSJT-X:
+# Mono or stereo io
+# In stereo mode, tx audio is on right channel only.
+# Rx audio may use either channel but not both or mono.
+
+# QSSTV:
+# Stereo-only io
+# Rx audio pulls from one channel only, so splitting the stream to
+# stereo mode results in audio in all cases.
+# Tx audio is only one channel, likely right, so must be swapped in
+# audio settings.
+
+# Direwolf:
+# Mono or stereo io, depending on the number of modems to run.
+# Each modem requires its own tx and rx channel, so channel count
+# must match.
+
+# ARDOP:
+# Modem requires a special 12ks/s rate, but is able to use
+# mono (preferred) or stereo io. Downsampling may cause aliasing.
+# Define ARDOP device as 48k rate.
+
+
+# SIGNALINK
+
+pcm.SIG {
+    type hw
+    card "SIGNALINK"
+    rate 48000
+    channels 1
+    nonblock 0
+    hint.show off
+    hint.description "SLUSB hw device"
+}
+
+pcm.SIG_AUTO {
+    type plug
+    slave.pcm "SIG"
+    hint.show on
+    hint.description "Signalink auto device conversion"
+}
+
+
+# # XONAR U5
+
+pcm.XONAR {
+    type hw
+    card "U5"
+    rate 192000
+    channels 2
+    nonblock 1
+    hint.show off
+    hint.description "Xonar U5"
+}
+
+pcm.XON_AUTO {
+    type plug
+    slave.pcm "XONAR"
+    hint.show on
+    hint.description "XONAR auto device conversion"
+}
+
+pcm.DIG_AUTO {
+    type plug
+    slave.pcm "DIGIRIG"
+    hint.show on
+    hint.description "Digirig auto device conversion"
+}
+
+
+# XONAR device is full-duplex stereo. FT-736R uses a stereo jack to input and
+# output data on opposite channels (right, left respectively). Simple hardware
+# solution is to run a Y-splitter to I/O ports and downmix to proper channel.
+
+pcm.736_TX {
+    type route
+    slave.pcm "XONAR"
+    slave.channels 2
+    ttable {
+        0.0 0.5
+        1.0 0.5
+        0.1 0
+        1.1 0
+    }
+    hint.show off
+    hint.description "Mix to left channel"
+}
+
+pcm.736_RX {
+    type route
+    slave.pcm "XONAR"
+    slave.channels 2
+    ttable {
+        0.0 0
+        1.0 0
+        0.1 0.5
+        1.1 0.5
+    }
+    hint.show off
+    hint.description "Mix to right channel"
+}
+
+pcm.XON_736 {
+    type asym
+    playback.pcm "736_TX"
+    capture.pcm "736_RX"
+    hint.show on
+    hint.description "XONAR device for FT-736R"
+}
+
+
+# ARDOP: See above
+
+pcm.ARDOP {
+    type plug
+    slave.pcm XON_736
+    hint.show on
+    hint.description "ARDOP"
+}
+
+
+# SDR Loopback device
+# This device consumes audio from SDR_IN and spits it out SDR_OUT.
+# This allows local software to consume audio exactly as if it were
+# coming from a physical card. As with the Signalink, use dmix and
+# dsnoop plugins to allow multiple clients to use the device. Since
+# there is no transmit capability in most SDRs, only one consumer
+# is needed and no transmit audio is needed.
+pcm.SDR_NC {
+    type hw
+    card "SDRLB"
+    device 0
+    subdevice 0
+    format "S16_LE"
+    channels 2
+    rate 48000
+    nonblock 1
+    hint.show off
+    hint.description "Send nc packets here"
+}
+
+pcm.SDR_DEC {
+    type hw
+    card "SDRLB"
+    device 1
+    subdevice 0
+    format "S16_LE"
+    channels 2
+    rate 48000
+    nonblock 1
+    hint.show off
+    hint.description "SDR Rx audio"
+}
+
+pcm.SDR_NC_AUTO {
+    type plug
+    slave {
+        pcm "SDR_NC"
+    }
+    hint.show off
+    hint.description "Send nc packets here"
+}
+
+pcm.SDR_DEC_AUTO {
+    type plug
+    slave {
+        pcm "SDR_DEC"
+    }
+    hint.show on
+    hint.description "Connect decoder here"
+}
